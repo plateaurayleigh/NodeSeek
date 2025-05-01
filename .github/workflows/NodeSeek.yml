@@ -40,4 +40,4 @@ jobs:
           NS_RANDOM: ${{ secrets.NS_RANDOM }}
           HEADLESS: "true"
         run: |
-          python nodeseek_daily.py
+          python nodeseek.py
