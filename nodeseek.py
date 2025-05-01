@@ -106,12 +106,15 @@ def setup_driver_and_cookies():
         options.add_argument('--window-size=1920,1080')
         options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36') # Example UA
 
-    driver = None # <-- FIX: Initialize driver to None before the try block
+    driver = None # FIX: Initialize driver to None before the try block
 
     try:
         print("正在启动Chrome...")
-        # This line might fail and raise SessionNotCreatedException
-        driver = uc.Chrome(options=options)
+        # --- MODIFICATION HERE ---
+        # Specify the main version of Chrome found on the runner (135)
+        # This tells undetected_chromedriver to look for a ChromeDriver compatible with Chrome 135
+        driver = uc.Chrome(options=options, version_main=135)
+        # -------------------------
 
         if HEADLESS and driver: # Check if driver was successfully created
              # Execute JS to hide webdriver property
@@ -158,13 +161,6 @@ def setup_driver_and_cookies():
              return driver
         else:
              print("Error: Sign-in icon not found after refresh. Cookie setup may have failed.")
-             # Optional: Check for login specific elements if sign-in icon isn't reliable
-             # try:
-             #     WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, '.user-avatar')))
-             #     print("User avatar found. Cookie setup likely successful.")
-             #     return driver
-             # except TimeoutException:
-             #     print("User avatar not found. Cookie setup likely failed.")
              driver.quit() # Quit the driver if setup failed
              return None
 
@@ -173,6 +169,7 @@ def setup_driver_and_cookies():
         print(f"Error details: {e}")
         print("Please ensure your undetected-chromedriver and Chrome browser versions are compatible.")
         print("In GitHub Actions, try upgrading undetected-chromedriver and selenium.")
+        print("If the issue persists, try specifying version_main in uc.Chrome().")
         if driver: driver.quit() # Ensure driver is closed if it was partially created
         return None
     except Exception as e:
@@ -202,15 +199,6 @@ def click_sign_icon(driver):
         safe_click(driver, sign_icon, "sign-in icon")
 
         print("Sign-in icon clicked. Waiting for sign-in modal/page...")
-
-        # Wait for the "试试手气" button to appear in the modal/new page
-        # This button is the one to click to claim the daily reward
-        # Use NS_RANDOM to potentially click a different button if needed in the future,
-        # but for now, the sign-in button is usually "试试手气" or "鸡腿 x 5"
-        # Let's stick to "试试手气" as it's more generic for the sign-in action itself.
-        # The original code had logic here based on ns_random for the *sign-in* button,
-        # which seems incorrect. The sign-in button is usually fixed.
-        # The "试试手气" vs "鸡腿 x 5" choice is for the *reward* button *after* clicking sign-in.
 
         # Wait for the reward button (either "试试手气" or "鸡腿 x 5")
         reward_button_xpath = "//button[contains(text(), '试试手气')] | //button[contains(text(), '鸡腿 x 5')]"
@@ -245,9 +233,6 @@ def click_chicken_leg(driver):
     print("Attempting to give a chicken leg...")
     try:
         # Wait for the chicken leg icon to be clickable
-        # Use a more robust XPath that doesn't rely on exact class order if possible,
-        # or ensure the class is correct. '//div[@class="nsk-post"]//div[@title="加鸡腿"][1]' seems specific.
-        # Let's stick to the original XPath for now if it worked before.
         chicken_btn = wait_and_find_element(driver, By.XPATH, '//div[@class="nsk-post"]//div[@title="加鸡腿"][1]', timeout=5, element_name="'加鸡腿' icon")
         if not chicken_btn:
             print("'加鸡腿' icon not found or not clickable.")
@@ -457,7 +442,6 @@ if __name__ == "__main__":
         if not driver:
             print("Browser setup failed. Exiting.")
             # No need to exit(1) here, the finally block will handle cleanup
-            # exit(1) # Removed exit(1) to allow finally block to run
             pass # Just pass if setup failed
 
         # Only proceed if driver was successfully created
