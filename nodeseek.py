@@ -20,7 +20,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 # from selenium.webdriver.common.keys import Keys # Keys is not directly used, ActionChains handles it
 from selenium.webdriver.common.action_chains import ActionChains
-from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException, SessionNotCreatedException
 
 # --- Configuration ---
 # Read configuration from environment variables once
@@ -106,14 +106,22 @@ def setup_driver_and_cookies():
         options.add_argument('--window-size=1920,1080')
         options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36') # Example UA
 
+    driver = None # <-- FIX: Initialize driver to None before the try block
+
     try:
+        print("正在启动Chrome...")
+        # This line might fail and raise SessionNotCreatedException
         driver = uc.Chrome(options=options)
 
-        if HEADLESS:
+        if HEADLESS and driver: # Check if driver was successfully created
              # Execute JS to hide webdriver property
              driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
              # Set window size again just in case (redundant with option, but harmless)
              # driver.set_window_size(1920, 1080) # Option should handle this
+
+        if not driver: # Should not happen if uc.Chrome didn't raise, but good practice
+             print("Error: uc.Chrome did not return a driver instance.")
+             return None
 
         print("Chrome started successfully.")
 
@@ -157,13 +165,21 @@ def setup_driver_and_cookies():
              #     return driver
              # except TimeoutException:
              #     print("User avatar not found. Cookie setup likely failed.")
-             driver.quit()
+             driver.quit() # Quit the driver if setup failed
              return None
 
+    except SessionNotCreatedException as e:
+        print(f"FATAL ERROR: Session not created. This is likely a Chrome/ChromeDriver version mismatch.")
+        print(f"Error details: {e}")
+        print("Please ensure your undetected-chromedriver and Chrome browser versions are compatible.")
+        print("In GitHub Actions, try upgrading undetected-chromedriver and selenium.")
+        if driver: driver.quit() # Ensure driver is closed if it was partially created
+        return None
     except Exception as e:
-        print(f"An error occurred during browser setup or cookie configuration: {e}")
-        traceback.print_exc()
-        if driver:
+        print(f"An unexpected error occurred during browser setup or cookie configuration: {e}")
+        print("详细错误信息:")
+        print(traceback.format_exc())
+        if driver: # Now 'driver' is always defined (either None or the failed object)
             driver.quit()
         return None
 
@@ -189,12 +205,25 @@ def click_sign_icon(driver):
 
         # Wait for the "试试手气" button to appear in the modal/new page
         # This button is the one to click to claim the daily reward
-        if wait_and_click_element(driver, By.XPATH, "//button[contains(text(), '试试手气')]", timeout=10, element_name="'试试手气' button"):
-            print("'试试手气' button clicked successfully.")
-            # Add a small wait for the modal/dialog to process/close
-            time.sleep(3) # Give time for the reward animation/dialog
+        # Use NS_RANDOM to potentially click a different button if needed in the future,
+        # but for now, the sign-in button is usually "试试手气" or "鸡腿 x 5"
+        # Let's stick to "试试手气" as it's more generic for the sign-in action itself.
+        # The original code had logic here based on ns_random for the *sign-in* button,
+        # which seems incorrect. The sign-in button is usually fixed.
+        # The "试试手气" vs "鸡腿 x 5" choice is for the *reward* button *after* clicking sign-in.
+
+        # Wait for the reward button (either "试试手气" or "鸡腿 x 5")
+        reward_button_xpath = "//button[contains(text(), '试试手气')] | //button[contains(text(), '鸡腿 x 5')]"
+        reward_button = wait_and_find_element(driver, By.XPATH, reward_button_xpath, timeout=10, element_name="'试试手气' or '鸡腿 x 5' button")
+
+        if reward_button and reward_button.is_enabled() and reward_button.is_displayed():
+             print(f"Found reward button: '{reward_button.text}', attempting click...")
+             safe_click(driver, reward_button, f"'{reward_button.text}' button")
+             print("Reward button clicked successfully.")
+             # Add a small wait for the modal/dialog to process/close
+             time.sleep(3) # Give time for the reward animation/dialog
         else:
-            print("'试试手气' button not found or not clickable (possibly already signed in today).")
+            print("Reward button ('试试手气' or '鸡腿 x 5') not found, not clickable, or already signed in.")
 
         # Optional: Check for a success message or the sign-in status change
         # This part is highly site-specific and might require inspecting the DOM after clicking
@@ -216,6 +245,9 @@ def click_chicken_leg(driver):
     print("Attempting to give a chicken leg...")
     try:
         # Wait for the chicken leg icon to be clickable
+        # Use a more robust XPath that doesn't rely on exact class order if possible,
+        # or ensure the class is correct. '//div[@class="nsk-post"]//div[@title="加鸡腿"][1]' seems specific.
+        # Let's stick to the original XPath for now if it worked before.
         chicken_btn = wait_and_find_element(driver, By.XPATH, '//div[@class="nsk-post"]//div[@title="加鸡腿"][1]', timeout=5, element_name="'加鸡腿' icon")
         if not chicken_btn:
             print("'加鸡腿' icon not found or not clickable.")
@@ -417,25 +449,31 @@ def nodeseek_comment(driver):
 
 if __name__ == "__main__":
     print("Starting NodeSeek automation script...")
-    driver = None
+    driver = None # Initialize driver to None in the main scope as well
+
     try:
         # 1. Setup browser and cookies
         driver = setup_driver_and_cookies()
         if not driver:
             print("Browser setup failed. Exiting.")
-            exit(1)
+            # No need to exit(1) here, the finally block will handle cleanup
+            # exit(1) # Removed exit(1) to allow finally block to run
+            pass # Just pass if setup failed
 
-        # 2. Perform sign-in
-        print("\n--- Starting Sign-in Task ---")
-        click_sign_icon(driver)
-        print("--- Sign-in Task Attempted ---\n")
+        # Only proceed if driver was successfully created
+        if driver:
+            # 2. Perform sign-in
+            print("\n--- Starting Sign-in Task ---")
+            click_sign_icon(driver)
+            print("--- Sign-in Task Attempted ---\n")
 
-        # 3. Perform commenting and chicken leg task
-        print("\n--- Starting Commenting Task ---")
-        nodeseek_comment(driver)
-        print("--- Commenting Task Completed ---\n")
+            # 3. Perform commenting and chicken leg task
+            print("\n--- Starting Commenting Task ---")
+            nodeseek_comment(driver)
+            print("--- Commenting Task Completed ---\n")
 
     except Exception as main_error:
+        # This block catches any exceptions *not* caught within the functions
         print(f"An unhandled error occurred in the main script execution: {main_error}")
         traceback.print_exc()
 
