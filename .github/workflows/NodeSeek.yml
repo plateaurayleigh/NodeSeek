@@ -13,12 +13,9 @@ jobs:
 
     steps:
       - name: Checkout repository
-        # 使用最新版本的 checkout action
         uses: actions/checkout@v4
 
       - name: Set up Python
-        # 使用最新版本的 setup-python action
-        # 使用主版本号，避免特定补丁版本不存在的问题
         uses: actions/setup-python@v4
         with:
           python-version: '3.11' # 或者 '3.x'
@@ -48,7 +45,6 @@ jobs:
       - name: Run NodeSeek script
         env:
           NS_COOKIE: ${{ secrets.NS_COOKIE }}
-          # NS_RANDOM 环境变量控制脚本行为，根据需要设置
           NS_RANDOM: ${{ secrets.NS_RANDOM }} # 或者直接设置为 "true" 或 "false"
           HEADLESS: "true" # 在 CI 环境中通常需要无头模式
         run: |
