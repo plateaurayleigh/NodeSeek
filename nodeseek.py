@@ -29,7 +29,7 @@ COOKIE = os.environ.get("NS_COOKIE") or os.environ.get("COOKIE")
 HEADLESS = os.environ.get("HEADLESS", "true").lower() == "true"
 
 # Comment strings
-RANDOM_INPUT_STR = ["bd", "绑定", "帮顶"]
+RANDOM_INPUT_STR = ["BD", "帮顶"]
 
 # --- Helper Functions ---
 
